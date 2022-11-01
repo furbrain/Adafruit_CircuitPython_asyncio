@@ -152,13 +152,14 @@ async def open_connection(host, port):
     This is a coroutine.
     """
 
-    from uerrno import EINPROGRESS
-    import usocket as socket
+    from errno import EINPROGRESS
+    from socketpool import SocketPool
+    import wifi
 
-    ai = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)[
-        0
-    ]  # TODO this is blocking!
-    s = socket.socket(ai[0], ai[1], ai[2])
+    socket = SocketPool(wifi.radio)
+
+    ai = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)[0]  # TODO this is blocking!
+    s = socket.socket(ai[0], ai[1])
     s.setblocking(False)
     ss = Stream(s)
     try:
@@ -166,6 +167,7 @@ async def open_connection(host, port):
     except OSError as er:
         if er.errno != EINPROGRESS:
             raise er
+    # this falls over when ultimately s gets passed into `select.epoll.register`
     core._io_queue.queue_write(s)
     await core.sleep(0)
     return ss, ss
@@ -228,13 +230,17 @@ async def start_server(cb, host, port, backlog=5):
     This is a coroutine.
     """
 
-    import usocket as socket
+    from socketpool import SocketPool
+    import wifi
+
+    socket = SocketPool(wifi.radio)
 
     # Create and bind server socket.
     host = socket.getaddrinfo(host, port)[0]  # TODO this is blocking!
     s = socket.socket()
     s.setblocking(False)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # the following command is not available in circuitpython
+    #s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(host[-1])
     s.listen(backlog)
 
